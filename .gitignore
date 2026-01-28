@@ -119,6 +119,10 @@ models/*.png
 logs/
 *.log
 
+# Word temp files
+~$*
+*.docx
+
 # Keep directories
 !data/.gitkeep
 !models/.gitkeep

@@ -1,5 +1,4 @@
-# Deep Learning & Machine Learning
-tensorflow
+# Core Dependencies for Streamlit Cloud Deployment
 scikit-learn
 numpy
 pandas
@@ -14,9 +13,3 @@ streamlit
 
 # Utilities
 joblib
-python-dotenv
-tqdm
-
-# Jupyter Support
-jupyter
-ipykernel
