@@ -170,7 +170,6 @@ st.markdown("""
 
 def load_model_and_preprocessor():
     """Load the trained model and preprocessor."""
-    import tensorflow as tf
     import joblib
     
     model_path = 'models/final_model.keras'
@@ -179,17 +178,22 @@ def load_model_and_preprocessor():
     model = None
     preprocessor = None
     
-    if os.path.exists(model_path):
-        try:
-            model = tf.keras.models.load_model(model_path, compile=False)
-        except Exception as e:
-            st.warning(f"Could not load model: {e}")
+    # Try to import TensorFlow (may not be available on Python 3.13+)
+    try:
+        import tensorflow as tf
+        if os.path.exists(model_path):
+            try:
+                model = tf.keras.models.load_model(model_path, compile=False)
+            except Exception as e:
+                pass  # Model not available, will use physics model
+    except ImportError:
+        pass  # TensorFlow not installed, will use physics model
     
     if os.path.exists(preprocessor_path):
         try:
             preprocessor = joblib.load(preprocessor_path)
         except Exception as e:
-            st.warning(f"Could not load preprocessor: {e}")
+            pass  # Preprocessor not available
     
     return model, preprocessor
 
