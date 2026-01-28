@@ -489,8 +489,8 @@ def main():
         with map_col:
             st.markdown(f"#### {map_title}")
             
-            # Create interactive map
-            fig_map = px.scatter_mapbox(
+            # Create interactive map using scatter_geo (works without mapbox token)
+            fig_map = px.scatter_geo(
                 display_df,
                 lat="latitude",
                 lon="longitude",
@@ -509,10 +509,24 @@ def main():
                 },
                 color_continuous_scale="YlOrRd",
                 size_max=20,
-                zoom=4 if selected_state == "All India" else 6,
-                center={"lat": display_df['latitude'].mean(), "lon": display_df['longitude'].mean()},
-                mapbox_style="carto-positron",
+                scope="asia",
                 title=""
+            )
+            
+            fig_map.update_geos(
+                visible=True,
+                resolution=50,
+                showcountries=True,
+                countrycolor="lightgray",
+                showsubunits=True,
+                subunitcolor="lightgray",
+                showland=True,
+                landcolor="rgb(243, 243, 243)",
+                showocean=True,
+                oceancolor="rgb(204, 229, 255)",
+                showlakes=True,
+                lakecolor="rgb(204, 229, 255)",
+                fitbounds="locations"
             )
             
             fig_map.update_layout(
@@ -521,6 +535,10 @@ def main():
                 coloraxis_colorbar=dict(
                     title="Efficiency %",
                     ticksuffix="%"
+                ),
+                geo=dict(
+                    center=dict(lat=22, lon=82),
+                    projection_scale=4 if selected_state == "All India" else 8
                 )
             )
             
