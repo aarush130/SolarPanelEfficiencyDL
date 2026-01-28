@@ -21,6 +21,12 @@ import json
 # Add project to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Import India data module
+from src.india_data import (
+    get_india_cities_dataframe, get_state_analysis, get_all_states,
+    get_top_cities, get_state_summary, calculate_city_efficiency
+)
+
 # Page configuration - must be first Streamlit command
 st.set_page_config(
     page_title="Solar Panel Efficiency Predictor",
@@ -400,15 +406,258 @@ def main():
     sample_data = load_sample_data()
     
     # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🇮🇳 India Solar Map", 
         "🔮 Prediction", 
         "📊 Data Analysis", 
         "📈 Model Performance",
         "📚 About"
     ])
     
-    # ==================== TAB 1: PREDICTION ====================
+    # ==================== TAB 1: INDIA SOLAR MAP ====================
     with tab1:
+        st.markdown("### 🇮🇳 Solar Panel Efficiency Across India")
+        st.markdown("Explore the best locations for solar panel installation based on real climate data.")
+        
+        # Load India data
+        india_df = get_state_analysis()
+        all_states = get_all_states()
+        
+        # State selector
+        col_select1, col_select2 = st.columns([2, 1])
+        with col_select1:
+            selected_state = st.selectbox(
+                "Select State for Detailed Analysis",
+                ["All India"] + all_states,
+                index=0
+            )
+        with col_select2:
+            panel_age_input = st.slider("Panel Age (years)", 0, 20, 5)
+        
+        # Filter data based on selection
+        if selected_state != "All India":
+            display_df = get_state_analysis(selected_state)
+            map_title = f"Solar Potential in {selected_state}"
+        else:
+            display_df = india_df
+            map_title = "Solar Potential Across India"
+        
+        # Recalculate with user's panel age
+        display_df['estimated_efficiency'] = display_df.apply(
+            lambda row: calculate_city_efficiency(row, panel_age=panel_age_input), axis=1
+        )
+        
+        # Key metrics
+        st.markdown("---")
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        
+        with metric_col1:
+            best_city = display_df.iloc[0]
+            st.metric(
+                "🏆 Best Location",
+                best_city['city'],
+                f"{best_city['estimated_efficiency']:.1f}% efficiency"
+            )
+        
+        with metric_col2:
+            st.metric(
+                "☀️ Highest GHI",
+                f"{display_df['solar_irradiance'].max():.2f}",
+                "kWh/m²/day"
+            )
+        
+        with metric_col3:
+            st.metric(
+                "⚡ Avg Efficiency",
+                f"{display_df['estimated_efficiency'].mean():.1f}%",
+                f"across {len(display_df)} cities"
+            )
+        
+        with metric_col4:
+            avg_gen = display_df['annual_generation_kwh'].mean()
+            st.metric(
+                "🔋 Avg Annual Gen",
+                f"{avg_gen:.0f} kWh",
+                "per 1kW system"
+            )
+        
+        st.markdown("---")
+        
+        # Map visualization
+        map_col, table_col = st.columns([3, 2])
+        
+        with map_col:
+            st.markdown(f"#### {map_title}")
+            
+            # Create interactive map
+            fig_map = px.scatter_mapbox(
+                display_df,
+                lat="latitude",
+                lon="longitude",
+                color="estimated_efficiency",
+                size="solar_irradiance",
+                hover_name="city",
+                hover_data={
+                    "state": True,
+                    "solar_irradiance": ":.2f",
+                    "estimated_efficiency": ":.1f",
+                    "annual_generation_kwh": ":.0f",
+                    "avg_temperature": ":.1f",
+                    "humidity": True,
+                    "latitude": False,
+                    "longitude": False
+                },
+                color_continuous_scale="YlOrRd",
+                size_max=20,
+                zoom=4 if selected_state == "All India" else 6,
+                center={"lat": display_df['latitude'].mean(), "lon": display_df['longitude'].mean()},
+                mapbox_style="carto-positron",
+                title=""
+            )
+            
+            fig_map.update_layout(
+                height=500,
+                margin=dict(l=0, r=0, t=0, b=0),
+                coloraxis_colorbar=dict(
+                    title="Efficiency %",
+                    ticksuffix="%"
+                )
+            )
+            
+            st.plotly_chart(fig_map, use_container_width=True)
+        
+        with table_col:
+            st.markdown("#### 🏅 Top Locations Ranking")
+            
+            # Create ranking table
+            ranking_df = display_df[['city', 'state', 'estimated_efficiency', 'solar_score']].head(10).copy()
+            ranking_df.columns = ['City', 'State', 'Efficiency %', 'Score']
+            ranking_df['Rank'] = range(1, len(ranking_df) + 1)
+            ranking_df = ranking_df[['Rank', 'City', 'State', 'Efficiency %', 'Score']]
+            ranking_df['Efficiency %'] = ranking_df['Efficiency %'].round(1)
+            ranking_df['Score'] = ranking_df['Score'].round(1)
+            
+            st.dataframe(
+                ranking_df,
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Rank": st.column_config.NumberColumn("🏅", width="small"),
+                    "Efficiency %": st.column_config.ProgressColumn(
+                        "Efficiency",
+                        min_value=10,
+                        max_value=20,
+                        format="%.1f%%"
+                    ),
+                    "Score": st.column_config.ProgressColumn(
+                        "Solar Score",
+                        min_value=0,
+                        max_value=100,
+                        format="%.1f"
+                    )
+                }
+            )
+        
+        st.markdown("---")
+        
+        # State comparison chart
+        st.markdown("#### 📊 State-wise Comparison")
+        
+        state_summary = get_state_summary().reset_index()
+        
+        chart_col1, chart_col2 = st.columns(2)
+        
+        with chart_col1:
+            fig_bar = px.bar(
+                state_summary.head(15),
+                x='state',
+                y='Avg Efficiency (%)',
+                color='Avg GHI (kWh/m²/day)',
+                color_continuous_scale='Oranges',
+                title='Average Efficiency by State (Top 15)'
+            )
+            fig_bar.update_layout(
+                xaxis_tickangle=-45,
+                height=400,
+                showlegend=False
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        with chart_col2:
+            fig_scatter = px.scatter(
+                display_df,
+                x='solar_irradiance',
+                y='estimated_efficiency',
+                color='state' if selected_state == "All India" else 'humidity',
+                size='annual_sunshine_hours',
+                hover_name='city',
+                title='Solar Irradiance vs Efficiency',
+                labels={
+                    'solar_irradiance': 'GHI (kWh/m²/day)',
+                    'estimated_efficiency': 'Efficiency (%)'
+                }
+            )
+            fig_scatter.update_layout(height=400)
+            st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        # Detailed city information
+        st.markdown("---")
+        st.markdown("#### 📋 Detailed City Data")
+        
+        detail_df = display_df[[
+            'city', 'state', 'solar_irradiance', 'avg_temperature', 
+            'humidity', 'annual_sunshine_hours', 'estimated_efficiency', 
+            'annual_generation_kwh', 'solar_score'
+        ]].copy()
+        
+        detail_df.columns = [
+            'City', 'State', 'GHI (kWh/m²/day)', 'Avg Temp (°C)',
+            'Humidity (%)', 'Sunshine Hours/Year', 'Efficiency (%)',
+            'Annual Gen (kWh/kW)', 'Solar Score'
+        ]
+        
+        st.dataframe(
+            detail_df.round(2),
+            hide_index=True,
+            use_container_width=True
+        )
+        
+        # Download button
+        csv = detail_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Data as CSV",
+            data=csv,
+            file_name=f"solar_data_{selected_state.replace(' ', '_')}.csv",
+            mime="text/csv"
+        )
+        
+        # Recommendations
+        st.markdown("---")
+        st.markdown("#### 💡 Installation Recommendations")
+        
+        if selected_state != "All India":
+            best = display_df.iloc[0]
+            st.success(f"""
+            **Best location in {selected_state}: {best['city']}**
+            
+            - 🌞 Solar Irradiance: {best['solar_irradiance']:.2f} kWh/m²/day
+            - ⚡ Expected Efficiency: {best['estimated_efficiency']:.1f}%
+            - 🔋 Annual Generation: {best['annual_generation_kwh']:.0f} kWh per 1kW system
+            - 🌡️ Average Temperature: {best['avg_temperature']:.1f}°C
+            - 💧 Humidity: {best['humidity']}%
+            """)
+        else:
+            st.info("""
+            **Top 3 States for Solar Installation:**
+            1. 🥇 **Rajasthan** - Highest solar irradiance in Jaisalmer & Jodhpur
+            2. 🥈 **Gujarat** - Excellent conditions in Kutch region  
+            3. 🥉 **Ladakh** - Highest altitude with exceptional clarity
+            
+            Select a specific state above for detailed analysis!
+            """)
+
+    # ==================== TAB 2: PREDICTION ====================
+    with tab2:
         st.markdown("### Enter Solar Panel Parameters")
         
         col1, col2, col3 = st.columns(3)
@@ -591,8 +840,8 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
     
-    # ==================== TAB 2: DATA ANALYSIS ====================
-    with tab2:
+    # ==================== TAB 3: DATA ANALYSIS ====================
+    with tab3:
         st.markdown("### 📊 Dataset Analysis")
         
         if sample_data is not None:
@@ -654,8 +903,8 @@ def main():
         else:
             st.info("📁 No data found. Generate data using `python src/data_generator.py`")
     
-    # ==================== TAB 3: MODEL PERFORMANCE ====================
-    with tab3:
+    # ==================== TAB 4: MODEL PERFORMANCE ====================
+    with tab4:
         st.markdown("### 📈 Model Performance Metrics")
         
         if metrics:
@@ -745,8 +994,8 @@ def main():
         else:
             st.info("📊 No metrics found. Train the model first using `python src/train.py`")
     
-    # ==================== TAB 4: ABOUT ====================
-    with tab4:
+    # ==================== TAB 5: ABOUT ====================
+    with tab5:
         st.markdown("""
         ### 📚 About This Project
         
